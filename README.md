@@ -1,6 +1,6 @@
 # OpenFOV
 
-Webcam head tracking for iRacing and other sim/flight games.
+Webcam head tracking for iRacing.
 One installer, one launch — head tracking working.
 
 ## Install
