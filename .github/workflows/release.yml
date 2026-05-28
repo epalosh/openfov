@@ -1,24 +1,24 @@
 name: Release
 
-# Triggered on version tags (v*.*.*). Builds the native NPClient + TrackIR
-# binaries, runs Nuitka, packages with Inno Setup, scans with VirusTotal,
-# and publishes the installer as a GitHub Release.
+# Triggered ONLY on version tags (v*.*.*). Builds the native NPClient +
+# TrackIR binaries, runs Nuitka, packages with Inno Setup, scans with
+# VirusTotal, and publishes the installer as a GitHub Release.
 #
-# SignPath integration is kept ready behind a `secrets.SIGNPATH_ENABLED`
+# This workflow deliberately does NOT define `workflow_dispatch` — adding
+# it caused GitHub to log a "0 jobs ran" evaluation against every regular
+# branch push, which then sent failure-notification emails on every
+# commit. If we ever need a manual trigger we can re-add it once GitHub
+# stops sending notifications for skipped evaluations.
+#
+# SignPath integration is kept ready behind a `vars.SIGNPATH_ENABLED`
 # repo variable. When SignPath's OSS application is approved, set
-# `SIGNPATH_ENABLED=true` plus the SignPath secrets and the same workflow
-# will sign automatically with no source changes.
+# `SIGNPATH_ENABLED=true` plus the SignPath secrets and the same
+# workflow will sign automatically with no source changes.
 
 on:
   push:
     tags:
       - 'v*.*.*'
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version (e.g. 0.9.0). Tag is preferred over this.'
-        required: false
-        default: '0.0.0-dev'
 
 permissions:
   contents: write    # softprops/action-gh-release needs this
@@ -40,12 +40,13 @@ jobs:
         shell: pwsh
         run: |
           $ref = "${{ github.ref }}"
+          # We only get here on a `refs/tags/v*` push (the workflow
+          # trigger gates it), so the fallback is just for sanity.
           if ($ref -like "refs/tags/v*") {
             $v = $ref -replace "^refs/tags/v", ""
           } else {
-            $v = "${{ inputs.version }}"
+            $v = "0.0.0-dev"
           }
-          if (-not $v) { $v = "0.0.0-dev" }
           Write-Output "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Building version $v"
 
