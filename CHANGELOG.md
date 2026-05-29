@@ -45,6 +45,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   thread's stop Event shadowed `threading.Thread._stop`, so every exit
   threw and skipped pipeline cleanup. Renamed the attribute.
 
+### Packaging
+- Bundle MediaPipe's `libmediapipe.dll` (~27 MB). It's loaded via `dlopen`
+  at runtime, so Nuitka never saw it and `--include-package-data` skips
+  DLLs — the standalone imported MediaPipe fine but the tracker failed to
+  initialize ("Could not find module libmediapipe.dll").
+- Bundle `NPClient64.dll` + `TrackIR.exe`. Nuitka's `--include-data-dir`
+  silently skips `.dll`/`.exe`, so the installed app couldn't deliver
+  tracking to iRacing (the registry pointed at a missing DLL).
+- `bundled_bin_dir()` now detects a Nuitka build (`__compiled__`) so it
+  resolves `<exe>/resources/bin` instead of over-shooting to `dist/`.
+- Installer output renamed to `OpenFOV-<ver>-setup.exe` to match the
+  release workflow, the winget manifest, and the docs.
+
 ### Tests
 - **Full suite: 158/158 passing.**
 
