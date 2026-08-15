@@ -39,13 +39,59 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   parent key. The old suite deferred this to "an integration test on
   Windows CI" that never existed, which is why the bug shipped three times.
 
+### Fixed — antivirus false positives
+- **Microsoft Defender classified the bundled `TrackIR.exe` as
+  `Trojan:Win32/Ravartar!rfn` (Severe) and quarantined it** out of
+  `resources\bin\`, which silently broke head tracking for the games that
+  need it. Three separate things made it look like malware, all now
+  addressed:
+  - Its whole body was `for(;;) Sleep(INFINITE);`. A tiny, stripped,
+    unsigned executable whose entry point sleeps forever is the classic
+    sandbox-evasion stub. It is now an ordinary Win32 program with a
+    message-only window and a real message pump. Still 0% CPU at idle.
+  - It shipped with no version resource and `-Wl,--strip-all`. It now
+    carries honest version metadata (identifying OpenFOV, not NaturalPoint)
+    and is no longer stripped.
+  - OpenFOV launched it `CREATE_SUSPENDED`, walked a thread snapshot, and
+    called `ResumeThread` — the textbook process-injection fingerprint.
+    Replaced with `STARTUPINFOEX` + `PROC_THREAD_ATTRIBUTE_JOB_LIST`, which
+    gives the same no-orphans guarantee atomically at process creation.
+
+  On the machine that reproducibly quarantined the old build, Defender now
+  reports no threats on the rebuilt one. That is one machine and one
+  definition set, not a guarantee.
+- The helper is no longer launched at all unless the active game needs it.
+  Most titles — iRacing included — find OpenFOV purely through the NPClient
+  registry key and never look at the process list. See
+  `GameProfile.requires_trackir_process` (default off).
+
+### Added — you can now tell whether it's actually working
+- The main window distinguishes **"a game is running"** from **"a game is
+  reading your head tracking"**. Those are different claims, and conflating
+  them is why a completely dead output path looked healthy for three
+  releases. The new indicator is real end-to-end proof: NPClient's
+  `NP_RegisterProgramProfileID` writes `GameId` and never `GameId2`, while
+  OpenFOV always writes both, so an inequality can only have come from a
+  game that loaded our DLL and called in.
+- `tools/verify_install.py` runs a real game's discovery sequence against an
+  install and exits non-zero, with a specific reason, if a game could not
+  use it. CI and the release workflow both run it — the release build
+  installs the actual installer first — plus a negative control that fails
+  the build if the check ever stops detecting known breakage.
+
+### Fixed — first-run friction
+- The camera picker listed a single webcam twice (`1400: USB Video Device`
+  and `700: USB Video Device` — the same device via two capture backends,
+  labelled with an internal index). Now one entry per physical device, by
+  friendly name.
+- The wizard's calibrate page was a dead end when no face was detected:
+  Calibrate disabled → Next disabled → Cancel the only way out. Added
+  **Skip for now**.
+- Cancelling the wizard no longer discards the camera you just picked.
+
 ### Known issues
-- The bundled `TrackIR.exe` shim is detected by Microsoft Defender as
-  `Trojan:Win32/Ravartar!rfn` on some machines and silently quarantined out
-  of `resources\bin\`. It is a false positive — the program's entire body is
-  `for(;;) Sleep(INFINITE);` — but if it is removed, head tracking can break
-  for games that require the process to exist. Tracked separately; the
-  installer is still unsigned.
+- The installer is still **unsigned**, so Windows will show *"Unknown
+  publisher"* / SmartScreen warnings until code signing is in place.
 
 ## [0.2.1] — Head-tracking feel + game-contention performance
 
