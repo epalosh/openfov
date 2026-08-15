@@ -243,7 +243,10 @@ def _run_gui(camera_index: int | None) -> int:
     # launches.
     declared = get_profile(profile.game_id)
     if declared is not None:
-        pipeline.set_game_output(declared.output)
+        pipeline.set_game_output(
+            declared.output,
+            requires_trackir_process=declared.requires_trackir_process,
+        )
     watcher.start()
 
     tray = Tray(app)
@@ -328,7 +331,10 @@ def _run_gui(camera_index: int | None) -> int:
         # Update profile's game_id if changed.
         new_profile = get_profile(wiz.chosen_game_id)
         if new_profile is not None:
-            pipeline.set_game_output(new_profile.output)
+            pipeline.set_game_output(
+                new_profile.output,
+                requires_trackir_process=new_profile.requires_trackir_process,
+            )
             window._profile.game_id = wiz.chosen_game_id
         # Push the freshly-calibrated neutral straight into the pipeline.
         if wiz.neutral_pose is not None:

@@ -65,3 +65,60 @@ def test_invalid_encryption_key_rejected() -> None:
     profile = GameOutputProfile(game_id=1001, encryption_key=b"\x01\x02\x03")
     with OutputManager() as mgr, pytest.raises(ValueError):
         mgr.set_game(profile)
+
+
+# ---------------------------------------------------------------------------
+# TrackIR.exe helper gating
+# ---------------------------------------------------------------------------
+
+
+def test_shim_not_started_by_start() -> None:
+    """start() must NOT launch the TrackIR.exe helper. Most games don't
+    need it and it's the component antivirus engines flag."""
+    mgr = OutputManager()
+    mgr.start()
+    try:
+        assert not mgr._shim.is_running
+    finally:
+        mgr.stop()
+
+
+def test_set_trackir_required_is_idempotent() -> None:
+    mgr = OutputManager()
+    mgr.start()
+    try:
+        mgr.set_trackir_required(False)
+        mgr.set_trackir_required(False)
+        assert not mgr._shim.is_running
+    finally:
+        mgr.stop()
+
+
+# ---------------------------------------------------------------------------
+# Connected-game detection
+# ---------------------------------------------------------------------------
+
+
+def test_zero_key_profile_publishes_game_id_zero() -> None:
+    """With no encryption table to hand over there is nothing to gain from
+    publishing the game's ID, and publishing it would mask the
+    GameId != GameId2 signal we use to detect a connected game."""
+    profile = GameOutputProfile(game_id=14101, encryption_key=b"\x00" * 8)
+    with OutputManager() as mgr:
+        mgr.set_game(profile)
+        assert mgr._writer._game_id == 0
+
+
+def test_nonzero_key_profile_publishes_real_game_id() -> None:
+    """When there *is* a table, NPClient only picks it up while
+    GameId == GameId2, so we must publish the real ID."""
+    profile = GameOutputProfile(game_id=2002, encryption_key=b"\x01" * 8)
+    with OutputManager() as mgr:
+        mgr.set_game(profile)
+        assert mgr._writer._game_id == 2002
+
+
+def test_no_client_detected_when_nothing_connected() -> None:
+    with OutputManager() as mgr:
+        mgr.set_game(GameOutputProfile(game_id=14101))
+        assert mgr.connected_game_id() is None
