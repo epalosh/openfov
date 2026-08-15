@@ -197,13 +197,19 @@ def _run_gui(camera_index: int | None) -> int:
     initial_neutral = None
     if config.show_wizard_on_next_launch:
         wiz = SetupWizard(config)
-        if wiz.exec() == wiz.DialogCode.Accepted:
-            config.camera_index = wiz.chosen_camera_index
+        accepted = wiz.exec() == wiz.DialogCode.Accepted
+        if accepted:
             initial_neutral = wiz.neutral_pose
             # Apply the wizard's game choice as the active profile's game_id.
             chosen_profile = load_profile(config.last_profile)
             chosen_profile.game_id = wiz.chosen_game_id
             save_profile(chosen_profile)
+        # Keep the camera the user picked even if they cancelled later on.
+        # Cancelling drops them into the main window, and throwing the
+        # selection away sent them there pointed at camera 0 — which is
+        # very often not the camera they just confirmed a live preview on.
+        if wiz.chosen_camera_index is not None:
+            config.camera_index = wiz.chosen_camera_index
         config.show_wizard_on_next_launch = False
         save_app_config(config)
 
@@ -243,7 +249,10 @@ def _run_gui(camera_index: int | None) -> int:
     # launches.
     declared = get_profile(profile.game_id)
     if declared is not None:
-        pipeline.set_game_output(declared.output)
+        pipeline.set_game_output(
+            declared.output,
+            requires_trackir_process=declared.requires_trackir_process,
+        )
     watcher.start()
 
     tray = Tray(app)
@@ -328,7 +337,10 @@ def _run_gui(camera_index: int | None) -> int:
         # Update profile's game_id if changed.
         new_profile = get_profile(wiz.chosen_game_id)
         if new_profile is not None:
-            pipeline.set_game_output(new_profile.output)
+            pipeline.set_game_output(
+                new_profile.output,
+                requires_trackir_process=new_profile.requires_trackir_process,
+            )
             window._profile.game_id = wiz.chosen_game_id
         # Push the freshly-calibrated neutral straight into the pipeline.
         if wiz.neutral_pose is not None:

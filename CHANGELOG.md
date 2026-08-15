@@ -3,6 +3,96 @@
 All notable changes to OpenFOV are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.2] — iRacing head tracking actually works
+
+### Fixed
+- **Games could never find OpenFOV's NPClient DLL.** This is the root cause
+  behind every "OpenFOV doesn't do anything in iRacing" report, and it has
+  been present since the very first release. Two defects in the same
+  registry write, both required for a game to find us
+  ([#12](https://github.com/epalosh/openfov/issues/12)):
+  - The directory was written as a **value** named `NPClient Location` on
+    `HKCU\Software\NaturalPoint\NATURALPOINT`. Games open
+    `...\NATURALPOINT\NPClient Location` as a **subkey** and read a value
+    named **`Path`** inside it. That subkey never existed, so the lookup
+    failed and no game ever called `LoadLibrary`.
+  - The value had no trailing separator. Games concatenate the DLL name
+    directly onto it (`reg_value + "NPClient64.dll"`), so even a correctly
+    placed value resolved to `...\resources\binNPClient64.dll`. We now emit
+    the same form opentrack does: forward slashes, guaranteed trailing `/`.
+
+  Both failures were silent — no error, no log line, no in-game message.
+  Upgrading is enough; the stale value from older installs is removed
+  automatically on next launch.
+- iRacing's program-profile ID corrected to **14101** (was a guessed 1001),
+  measured from what the sim writes into `FT_SharedMem`.
+
+### Added
+- `verify_registration()` — after registering, OpenFOV now reads the key
+  back *the way a game reads it* and confirms the result resolves to a real
+  `NPClient64.dll`, logging a loud error if not. Previously the app wrote a
+  value, read back its own value, and reported success while no game could
+  find anything.
+- Regression tests pinning the registry layout: the trailing-separator and
+  forward-slash invariants (all platforms), plus Windows round-trip tests
+  asserting the value lands in the subkey a game reads and *not* on the
+  parent key. The old suite deferred this to "an integration test on
+  Windows CI" that never existed, which is why the bug shipped three times.
+
+### Fixed — antivirus false positives
+- **Microsoft Defender classified the bundled `TrackIR.exe` as
+  `Trojan:Win32/Ravartar!rfn` (Severe) and quarantined it** out of
+  `resources\bin\`, which silently broke head tracking for the games that
+  need it. Three separate things made it look like malware, all now
+  addressed:
+  - Its whole body was `for(;;) Sleep(INFINITE);`. A tiny, stripped,
+    unsigned executable whose entry point sleeps forever is the classic
+    sandbox-evasion stub. It is now an ordinary Win32 program with a
+    message-only window and a real message pump. Still 0% CPU at idle.
+  - It shipped with no version resource and `-Wl,--strip-all`. It now
+    carries honest version metadata (identifying OpenFOV, not NaturalPoint)
+    and is no longer stripped.
+  - OpenFOV launched it `CREATE_SUSPENDED`, walked a thread snapshot, and
+    called `ResumeThread` — the textbook process-injection fingerprint.
+    Replaced with `STARTUPINFOEX` + `PROC_THREAD_ATTRIBUTE_JOB_LIST`, which
+    gives the same no-orphans guarantee atomically at process creation.
+
+  On the machine that reproducibly quarantined the old build, Defender now
+  reports no threats on the rebuilt one. That is one machine and one
+  definition set, not a guarantee.
+- The helper is no longer launched at all unless the active game needs it.
+  Most titles — iRacing included — find OpenFOV purely through the NPClient
+  registry key and never look at the process list. See
+  `GameProfile.requires_trackir_process` (default off).
+
+### Added — you can now tell whether it's actually working
+- The main window distinguishes **"a game is running"** from **"a game is
+  reading your head tracking"**. Those are different claims, and conflating
+  them is why a completely dead output path looked healthy for three
+  releases. The new indicator is real end-to-end proof: NPClient's
+  `NP_RegisterProgramProfileID` writes `GameId` and never `GameId2`, while
+  OpenFOV always writes both, so an inequality can only have come from a
+  game that loaded our DLL and called in.
+- `tools/verify_install.py` runs a real game's discovery sequence against an
+  install and exits non-zero, with a specific reason, if a game could not
+  use it. CI and the release workflow both run it — the release build
+  installs the actual installer first — plus a negative control that fails
+  the build if the check ever stops detecting known breakage.
+
+### Fixed — first-run friction
+- The camera picker listed a single webcam twice (`1400: USB Video Device`
+  and `700: USB Video Device` — the same device via two capture backends,
+  labelled with an internal index). Now one entry per physical device, by
+  friendly name.
+- The wizard's calibrate page was a dead end when no face was detected:
+  Calibrate disabled → Next disabled → Cancel the only way out. Added
+  **Skip for now**.
+- Cancelling the wizard no longer discards the camera you just picked.
+
+### Known issues
+- The installer is still **unsigned**, so Windows will show *"Unknown
+  publisher"* / SmartScreen warnings until code signing is in place.
+
 ## [0.2.1] — Head-tracking feel + game-contention performance
 
 > First build actually published by CI. v0.2.0 was tagged but never

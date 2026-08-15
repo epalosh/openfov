@@ -35,10 +35,28 @@ To recenter your view at any time, press **F9**.
 
 ## Troubleshooting
 
-There are known issues with getting OpenFOV connected to iRacing on some 
-users' setups. We are working on a solution! In the meantime, see the "Issues"
-tab for discussion on this, and how you might be able to fix the issue manually
-until a new release is dropped. ETA before 6/14. Thank you for your patience!
+**"OpenFOV tracks my head but iRacing doesn't move."** Releases up to and
+including **0.2.1** wrote the NaturalPoint registry pointer in the wrong
+place, so no game could ever locate OpenFOV's `NPClient64.dll` — silently,
+with no error. Update to the latest release; it corrects the key and cleans
+up the stale one on first launch.
+
+To confirm it is registered correctly, this key must exist and the path must
+end in a slash:
+
+```
+HKEY_CURRENT_USER\Software\NaturalPoint\NATURALPOINT\NPClient Location
+    Path = C:/Program Files/OpenFOV/resources/bin/
+```
+
+`%APPDATA%\OpenFOV\openfov.log` now records this on every launch — look for
+`NPClient registration verified`. If it says `BROKEN` or `MISSING`, attach
+the log to an issue.
+
+**Antivirus.** Some Defender definitions flag the bundled `TrackIR.exe` as
+malware (a false positive — it does nothing but sleep) and quarantine it out
+of `resources\bin\`. If tracking stopped working after an AV scan, check
+that folder still contains `NPClient64.dll` and `TrackIR.exe`.
 
 ## Architecture
 

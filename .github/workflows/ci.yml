@@ -36,3 +36,73 @@ jobs:
 
       - name: Test
         run: pytest -v
+
+  # ---------------------------------------------------------------------
+  # Does a game actually work against what we build?
+  #
+  # The unit suite only ever exercised Python source, which is how a
+  # registry pointer no game could read shipped in three consecutive
+  # releases. This job builds the native binaries, registers them exactly
+  # as the app does at runtime, and then performs a real game's discovery
+  # sequence against the result: open the NaturalPoint subkey, read Path,
+  # LoadLibrary by plain concatenation, verify NP_GetSignature, pull pose
+  # data. If any step breaks, the build fails.
+  # ---------------------------------------------------------------------
+  integration:
+    name: Game-discovery smoke test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e .
+
+      - name: Install MinGW-w64
+        run: choco install -y mingw
+
+      - name: Build NPClient stub + TrackIR shim
+        shell: pwsh
+        run: |
+          $env:Path = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin;" + $env:Path
+          pwsh ./npclient-vendor/build.ps1
+
+      - name: Register exactly as the app does at runtime
+        shell: pwsh
+        env:
+          OPENFOV_BIN_DIR: ${{ github.workspace }}\resources\bin
+        run: |
+          python -c "from openfov.output.npclient_bootstrap import ensure_registered; ensure_registered()"
+
+      - name: A game must be able to find and use us
+        shell: pwsh
+        run: |
+          python tools/verify_install.py --samples 2
+          if ($LASTEXITCODE -ne 0) { throw "A game could not use this build" }
+
+      - name: Negative control — the smoke test must actually detect breakage
+        shell: pwsh
+        run: |
+          # Recreate the 0.2.1 layout. If verify_install still passes here,
+          # the check is vacuous and we want to know immediately.
+          Remove-Item -Path 'HKCU:\Software\NaturalPoint' -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -Path 'HKCU:\Software\NaturalPoint\NATURALPOINT' -Force | Out-Null
+          Set-ItemProperty -Path 'HKCU:\Software\NaturalPoint\NATURALPOINT' `
+            -Name 'NPClient Location' -Value "${{ github.workspace }}\resources\bin"
+
+          python tools/verify_install.py --samples 1
+          $rc = $LASTEXITCODE
+          if ($rc -eq 0) { throw "verify_install passed on a known-broken layout" }
+          Write-Host "Negative control OK - breakage detected (exit $rc)."
+
+          # A non-zero exit here is the SUCCESS condition, but GitHub's pwsh
+          # wrapper appends `exit $LASTEXITCODE`, so without resetting it the
+          # step fails on its own passing result. Be explicit.
+          exit 0

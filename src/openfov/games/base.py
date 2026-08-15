@@ -35,6 +35,17 @@ class GameProfile:
     output: GameOutputProfile = field(default_factory=GameOutputProfile)
     default_axes: dict[str, AxisSettings] | None = None       # None = use profile defaults
 
+    # Whether this game needs a live process named TrackIR.exe before it
+    # will initialize head tracking. Falcon BMS and parts of MSFS do; most
+    # titles (iRacing included) locate us purely through the NPClient
+    # registry key and never look at the process list.
+    #
+    # Default False on purpose. The bundled helper attracts antivirus false
+    # positives — Defender flagged the 0.2.1 build as
+    # Trojan:Win32/Ravartar!rfn — so we only launch it for games that
+    # actually require it rather than unconditionally.
+    requires_trackir_process: bool = False
+
 
 class GameDetector:
     """Polls running processes and reports which registered GameProfile is

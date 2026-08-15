@@ -35,24 +35,80 @@ class CameraInfo:
 
     @property
     def display_label(self) -> str:
-        return f"{self.index}: {self.name}" if self.name else f"Camera {self.index}"
+        # Deliberately does NOT lead with `index`. On Windows the index is
+        # backend-encoded (1400 = MSMF + device 0, 700 = DSHOW + device 0),
+        # so the old "1400: USB Video Device" label showed users a magic
+        # number and, worse, listed the same physical webcam twice.
+        if not self.name:
+            return f"Camera {self.index}"
+        return f"{self.name} ({self.backend})" if self.backend else self.name
+
+
+# Windows capture backends, best first. MSMF is the modern path and what
+# CameraSource prefers; DSHOW is the legacy fallback for older UVC drivers.
+_BACKEND_NAMES = {
+    cv2.CAP_MSMF: "Media Foundation",
+    cv2.CAP_DSHOW: "DirectShow",
+}
+_BACKEND_ORDER = (cv2.CAP_MSMF, cv2.CAP_DSHOW)
+
+
+def _backend_of(index: int) -> int:
+    """cv2-enumerate-cameras encodes the backend into the index it hands
+    back (`CAP_* + ordinal`). Recover it so we can rank duplicates."""
+    for base in _BACKEND_ORDER:
+        if base <= index < base + 100:
+            return base
+    return cv2.CAP_ANY
+
+
+def _device_key(cam) -> object:
+    """Identity of the *physical* device, independent of backend.
+
+    The USB device path is identical across backends apart from the
+    trailing interface GUID, so trimming that gives a stable key. Falls
+    back to vendor/product/name when no path is exposed."""
+    path = getattr(cam, "path", None)
+    if path:
+        return path.split("#{")[0].lower()
+    return (getattr(cam, "vid", None), getattr(cam, "pid", None), cam.name)
 
 
 def enumerate_cameras() -> list[CameraInfo]:
-    """List available cameras with friendly names where possible.
+    """List available cameras with friendly names, one entry per physical
+    device.
 
     Returns at least an empty list (never raises). On Windows it tries
     cv2-enumerate-cameras for friendly names; otherwise it probes indices
-    0..N as a fallback."""
+    0..N as a fallback.
+
+    Windows exposes each webcam once per capture backend, so a single
+    camera used to appear twice ("1400: USB Video Device" and "700: USB
+    Video Device") with no way for the user to tell which to pick. We
+    collapse those to one entry, preferring Media Foundation."""
     cams: list[CameraInfo] = []
     if sys.platform == "win32":
         try:
             from cv2_enumerate_cameras import enumerate_cameras as _enum
 
+            best: dict[object, tuple[int, CameraInfo]] = {}
             for c in _enum():
-                cams.append(
-                    CameraInfo(index=c.index, name=c.name or "Unknown", backend=str(c.backend))
+                backend = _backend_of(c.index)
+                rank = (
+                    _BACKEND_ORDER.index(backend)
+                    if backend in _BACKEND_ORDER
+                    else len(_BACKEND_ORDER)
                 )
+                info = CameraInfo(
+                    index=c.index,
+                    name=c.name or "Unknown",
+                    backend=_BACKEND_NAMES.get(backend, ""),
+                )
+                key = _device_key(c)
+                existing = best.get(key)
+                if existing is None or rank < existing[0]:
+                    best[key] = (rank, info)
+            cams = [info for _, info in best.values()]
         except Exception as exc:
             logger.debug("cv2-enumerate-cameras unavailable, falling back to probe: %s", exc)
 
@@ -64,6 +120,28 @@ def enumerate_cameras() -> list[CameraInfo]:
             cap.release()
             if opened:
                 cams.append(CameraInfo(index=idx, name=f"Camera {idx}"))
+
+    # Disambiguate identical names across genuinely different devices
+    # (two of the same webcam model) so the list is still actionable.
+    seen: dict[str, int] = {}
+    for c in cams:
+        seen[c.name] = seen.get(c.name, 0) + 1
+    if any(n > 1 for n in seen.values()):
+        numbered: list[CameraInfo] = []
+        counters: dict[str, int] = {}
+        for c in cams:
+            if seen[c.name] > 1:
+                counters[c.name] = counters.get(c.name, 0) + 1
+                numbered.append(
+                    CameraInfo(
+                        index=c.index,
+                        name=f"{c.name} #{counters[c.name]}",
+                        backend=c.backend,
+                    )
+                )
+            else:
+                numbered.append(c)
+        cams = numbered
 
     return cams
 
