@@ -96,6 +96,13 @@ jobs:
           New-Item -Path 'HKCU:\Software\NaturalPoint\NATURALPOINT' -Force | Out-Null
           Set-ItemProperty -Path 'HKCU:\Software\NaturalPoint\NATURALPOINT' `
             -Name 'NPClient Location' -Value "${{ github.workspace }}\resources\bin"
+
           python tools/verify_install.py --samples 1
-          if ($LASTEXITCODE -eq 0) { throw "verify_install passed on a known-broken layout" }
-          Write-Host "Negative control OK - breakage is detected."
+          $rc = $LASTEXITCODE
+          if ($rc -eq 0) { throw "verify_install passed on a known-broken layout" }
+          Write-Host "Negative control OK - breakage detected (exit $rc)."
+
+          # A non-zero exit here is the SUCCESS condition, but GitHub's pwsh
+          # wrapper appends `exit $LASTEXITCODE`, so without resetting it the
+          # step fails on its own passing result. Be explicit.
+          exit 0
