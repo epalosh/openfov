@@ -3,6 +3,50 @@
 All notable changes to OpenFOV are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — iRacing head tracking actually works
+
+### Fixed
+- **Games could never find OpenFOV's NPClient DLL.** This is the root cause
+  behind every "OpenFOV doesn't do anything in iRacing" report, and it has
+  been present since the very first release. Two defects in the same
+  registry write, both required for a game to find us
+  ([#12](https://github.com/epalosh/openfov/issues/12)):
+  - The directory was written as a **value** named `NPClient Location` on
+    `HKCU\Software\NaturalPoint\NATURALPOINT`. Games open
+    `...\NATURALPOINT\NPClient Location` as a **subkey** and read a value
+    named **`Path`** inside it. That subkey never existed, so the lookup
+    failed and no game ever called `LoadLibrary`.
+  - The value had no trailing separator. Games concatenate the DLL name
+    directly onto it (`reg_value + "NPClient64.dll"`), so even a correctly
+    placed value resolved to `...\resources\binNPClient64.dll`. We now emit
+    the same form opentrack does: forward slashes, guaranteed trailing `/`.
+
+  Both failures were silent — no error, no log line, no in-game message.
+  Upgrading is enough; the stale value from older installs is removed
+  automatically on next launch.
+- iRacing's program-profile ID corrected to **14101** (was a guessed 1001),
+  measured from what the sim writes into `FT_SharedMem`.
+
+### Added
+- `verify_registration()` — after registering, OpenFOV now reads the key
+  back *the way a game reads it* and confirms the result resolves to a real
+  `NPClient64.dll`, logging a loud error if not. Previously the app wrote a
+  value, read back its own value, and reported success while no game could
+  find anything.
+- Regression tests pinning the registry layout: the trailing-separator and
+  forward-slash invariants (all platforms), plus Windows round-trip tests
+  asserting the value lands in the subkey a game reads and *not* on the
+  parent key. The old suite deferred this to "an integration test on
+  Windows CI" that never existed, which is why the bug shipped three times.
+
+### Known issues
+- The bundled `TrackIR.exe` shim is detected by Microsoft Defender as
+  `Trojan:Win32/Ravartar!rfn` on some machines and silently quarantined out
+  of `resources\bin\`. It is a false positive — the program's entire body is
+  `for(;;) Sleep(INFINITE);` — but if it is removed, head tracking can break
+  for games that require the process to exist. Tracked separately; the
+  installer is still unsigned.
+
 ## [0.2.1] — Head-tracking feel + game-contention performance
 
 > First build actually published by CI. v0.2.0 was tagged but never

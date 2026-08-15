@@ -19,13 +19,17 @@ from __future__ import annotations
 from openfov.games.base import GameProfile
 from openfov.output.manager import GameOutputProfile
 
-# Program-profile ID iRacing's TrackIR call uses. This is the value
-# passed to NP_RegisterProgramProfileID by the game.
+# Program-profile ID iRacing passes to NP_RegisterProgramProfileID.
 #
-# Note: iRacing's actual ID has historically been 1001. If a future
-# iRacing build changes this, our stub continues to work — NPClient
-# just records whatever the game passes, and we don't validate it.
-_IRACING_PROGRAM_ID = 1001
+# Measured, not guessed: with OpenFOV feeding FT_SharedMem, iRacing's
+# NPClient call wrote GameId=14101 into the shared section (2026.06 build,
+# iRacingSim64DX11.exe). Earlier releases hardcoded 1001, which was wrong.
+#
+# This is cosmetic today — NPClient only consults GameId to decide whether
+# to pick up a per-game XOR table, and iRacing's key is all zeros — but a
+# wrong ID would silently defeat encryption negotiation for any title that
+# does use one, so keep it accurate.
+_IRACING_PROGRAM_ID = 14101
 
 IRACING_PROFILE = GameProfile(
     id="iracing",
