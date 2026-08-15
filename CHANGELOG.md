@@ -3,7 +3,7 @@
 All notable changes to OpenFOV are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] — iRacing head tracking actually works
+## [0.2.2] — iRacing head tracking actually works
 
 ### Fixed
 - **Games could never find OpenFOV's NPClient DLL.** This is the root cause

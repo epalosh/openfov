@@ -70,11 +70,15 @@ jobs:
         run: |
           choco install -y mingw
 
-      - name: Build NPClient stub + TrackIR dummy
+      - name: Build NPClient stub + TrackIR shim
         shell: pwsh
         run: |
           $env:Path = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin;" + $env:Path
-          pwsh ./npclient-vendor/build.ps1
+          # -Version feeds TrackIR.exe's version resource. Without it the
+          # shim would ship stamped with build.ps1's local default, and a
+          # binary whose version never matches the release it came from is
+          # both confusing to support and a mild antivirus signal.
+          pwsh ./npclient-vendor/build.ps1 -Version "${{ steps.version.outputs.version }}.0"
 
       - name: Verify NPClient exports
         shell: pwsh

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openfov"
-version = "0.2.1"
+version = "0.2.2"
 description = "Webcam head tracking for iRacing and other sim/flight games."
 readme = "README.md"
 requires-python = ">=3.11"
