@@ -137,6 +137,13 @@ jobs:
 
           # Register against the *installed* binaries using the same code
           # path the app runs on launch, then perform a real game's lookup.
+          #
+          # PYTHONPATH rather than `pip install -e .`: this job deliberately
+          # installs only requirements-dev.txt, and adding an editable
+          # install ahead of the ~35 min Nuitka build would change the
+          # environment that build resolves imports in. Scope it to this
+          # step instead.
+          $env:PYTHONPATH = "$PWD\src"
           $env:OPENFOV_BIN_DIR = $binDir
           python -c "from openfov.output.npclient_bootstrap import ensure_registered; ensure_registered()"
           if ($LASTEXITCODE -ne 0) { throw "ensure_registered failed" }
