@@ -111,6 +111,34 @@ jobs:
           Write-Host "Installer: $($installer.FullName)"
           Write-Host "Size: $($installer.Length) bytes"
 
+      # Install what we just built and confirm a game could actually use
+      # it. v0.1.0 through v0.2.1 all shipped with head tracking that
+      # reached no game at all, because nothing here ever exercised the
+      # installed artifact — only Python source. This is that gate.
+      - name: Verify the built installer works for a game
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem installer/Output/OpenFOV-*-setup.exe | Select-Object -First 1
+          Write-Host "Installing $($installer.Name) silently..."
+          $p = Start-Process -FilePath $installer.FullName -Wait -PassThru `
+               -ArgumentList '/VERYSILENT','/ALLUSERS','/NORESTART','/SUPPRESSMSGBOXES'
+          if ($p.ExitCode -ne 0) { throw "Installer exited $($p.ExitCode)" }
+
+          $binDir = "C:\Program Files\OpenFOV\resources\bin"
+          foreach ($f in @('NPClient64.dll','TrackIR.exe')) {
+            if (-not (Test-Path (Join-Path $binDir $f))) {
+              throw "$f missing from the install — the bundle did not ship it"
+            }
+          }
+
+          # Register against the *installed* binaries using the same code
+          # path the app runs on launch, then perform a real game's lookup.
+          $env:OPENFOV_BIN_DIR = $binDir
+          python -c "from openfov.output.npclient_bootstrap import ensure_registered; ensure_registered()"
+          if ($LASTEXITCODE -ne 0) { throw "ensure_registered failed" }
+          python tools/verify_install.py --samples 2
+          if ($LASTEXITCODE -ne 0) { throw "A game could not use this installer" }
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:

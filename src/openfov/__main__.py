@@ -197,13 +197,19 @@ def _run_gui(camera_index: int | None) -> int:
     initial_neutral = None
     if config.show_wizard_on_next_launch:
         wiz = SetupWizard(config)
-        if wiz.exec() == wiz.DialogCode.Accepted:
-            config.camera_index = wiz.chosen_camera_index
+        accepted = wiz.exec() == wiz.DialogCode.Accepted
+        if accepted:
             initial_neutral = wiz.neutral_pose
             # Apply the wizard's game choice as the active profile's game_id.
             chosen_profile = load_profile(config.last_profile)
             chosen_profile.game_id = wiz.chosen_game_id
             save_profile(chosen_profile)
+        # Keep the camera the user picked even if they cancelled later on.
+        # Cancelling drops them into the main window, and throwing the
+        # selection away sent them there pointed at camera 0 — which is
+        # very often not the camera they just confirmed a live preview on.
+        if wiz.chosen_camera_index is not None:
+            config.camera_index = wiz.chosen_camera_index
         config.show_wizard_on_next_launch = False
         save_app_config(config)
 
