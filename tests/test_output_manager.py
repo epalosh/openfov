@@ -1,8 +1,12 @@
 """OutputManager lifecycle + GameOutputProfile switching tests.
 
-These deliberately don't exercise the Windows-only paths (registry,
-TrackIR.exe child process). Those run in CI on `windows-latest` and via
-manual end-to-end validation. What we *can* assert cross-platform:
+Note that `OutputManager.start()` *does* hit the Windows-only paths — it
+calls `ensure_registered()` and `TrackIRShim.start()`. The autouse fixture
+in conftest.py redirects the registry write and empties the bin dir so
+neither touches real machine state; without it, running this file on
+Windows repoints the user's actual NaturalPoint key at the checkout.
+
+What we assert cross-platform:
 - start()/stop() are idempotent
 - set_game() updates state, but doesn't break on no-op
 - write() is silent when not running
