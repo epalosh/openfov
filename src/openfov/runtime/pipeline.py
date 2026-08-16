@@ -285,12 +285,18 @@ class PipelineThread(QThread):
       between connected and disconnected. Surface this to the UI status
       bar (the pipeline keeps retrying automatically).
     - `error(str)` — fatal pipeline error; the thread is about to exit.
+    - `client_status(bool, int)` — a game has (or has stopped) actually
+      loading our NPClient and reading pose data; the int is the game's
+      program-profile ID (0 when disconnected). This is genuine end-to-end
+      proof, not an inference from process detection — see
+      `FreeTrackWriter.detected_client_game_id`.
     """
 
     frame_ready = Signal(object, object)
     pose_ready = Signal(object, object, object)
     camera_status = Signal(bool, str)
     error = Signal(str)
+    client_status = Signal(bool, int)
 
     # Hot-plug tunables. We treat ~0.5s of read failures as "disconnected"
     # and then attempt reopens on the device every retry interval (with a
@@ -304,6 +310,11 @@ class PipelineThread(QThread):
     # ~30 Hz is plenty. Skipping the emit when we just emitted prevents
     # the Qt event queue from backing up with 2.8 MB BGR frames.
     _UI_EMIT_INTERVAL_S = 1.0 / 30.0
+
+    # How often to re-check whether a game has picked up our NPClient. This
+    # is two integer reads out of shared memory, so it's cheap, but there's
+    # no reason to do it per-frame.
+    _CLIENT_CHECK_INTERVAL_S = 1.0
 
     def __init__(
         self,
@@ -433,10 +444,18 @@ class PipelineThread(QThread):
     def update_filter_params(self, axis: str, params: AxisFilterParams) -> None:
         self._filters.update_params(axis, params)
 
-    def set_game_output(self, profile: GameOutputProfile | None) -> None:
+    def set_game_output(
+        self,
+        profile: GameOutputProfile | None,
+        *,
+        requires_trackir_process: bool = False,
+    ) -> None:
         self._game_output = profile
         if profile is not None:
             self._output.set_game(profile)
+        # Only a few titles need a live TrackIR.exe; gating it keeps the
+        # AV-sensitive helper off the default path (see GameProfile).
+        self._output.set_trackir_required(requires_trackir_process)
 
     # -- main loop -----------------------------------------------------
 
@@ -495,6 +514,10 @@ class PipelineThread(QThread):
         avg_wait_ms = 0.0
         avg_infer_ms = 0.0
         last_diag_log_at = t0
+
+        # Whether a game has actually loaded our NPClient and registered.
+        last_client_check_at = 0.0
+        client_game_id: int | None = None
 
         # Bump the pipeline thread's OS priority. Under heavy iRacing
         # GPU/CPU load the default Normal priority loses scheduler
@@ -753,6 +776,26 @@ class PipelineThread(QThread):
                         fps, avg_read_ms, avg_wait_ms, avg_infer_ms,
                         commit_rate, drop_rate,
                     )
+
+                # Has a game actually picked us up? This is the only check
+                # in the app that proves the whole chain works end to end
+                # — registry found, DLL loaded, signature accepted, game
+                # calling in. Cheap (two shared-memory int reads), so a
+                # 1 Hz poll costs nothing.
+                if now - last_client_check_at >= self._CLIENT_CHECK_INTERVAL_S:
+                    last_client_check_at = now
+                    detected = self._output.connected_game_id()
+                    if detected != client_game_id:
+                        client_game_id = detected
+                        if detected is None:
+                            logger.info("No game is reading OpenFOV's head tracking")
+                            self.client_status.emit(False, 0)
+                        else:
+                            logger.info(
+                                "Head tracking is being read by a game "
+                                "(program-profile id %d)", detected,
+                            )
+                            self.client_status.emit(True, detected)
 
                 # Throttle UI emissions. The output writer above ran every
                 # tracker frame; the UI only needs ~30 Hz, and emitting at

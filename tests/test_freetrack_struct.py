@@ -7,8 +7,11 @@ struct changes size or field offsets, NPClient.dll will read garbage."""
 from __future__ import annotations
 
 import ctypes
+import sys
 
-from openfov.output.freetrack import FTData, FTHeap
+import pytest
+
+from openfov.output.freetrack import FreeTrackWriter, FTData, FTHeap
 
 
 def test_ftdata_size_matches_reference() -> None:
@@ -61,3 +64,48 @@ def test_writer_reports_expected_size() -> None:
     from openfov.output.freetrack import FreeTrackWriter
 
     assert FreeTrackWriter.expected_heap_size() == ctypes.sizeof(FTHeap)
+
+
+# ---------------------------------------------------------------------------
+# Connected-game detection
+#
+# npclient.c's NP_RegisterProgramProfileID does `pMemData->GameId = id` and
+# never touches GameId2. We always write the two fields together, so an
+# inequality can only have been produced by a game running our DLL. That is
+# the only end-to-end proof the app has that the whole chain works, so pin
+# the behaviour.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="shared memory is Windows-only")
+def test_no_client_detected_when_fields_agree() -> None:
+    w = FreeTrackWriter()
+    w.open()
+    try:
+        w.set_game_id(0)
+        assert w.detected_client_game_id() is None
+        w.set_game_id(14101)
+        assert w.detected_client_game_id() is None
+    finally:
+        w.close()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="shared memory is Windows-only")
+def test_client_detected_when_game_overwrites_game_id() -> None:
+    """Simulate exactly what NP_RegisterProgramProfileID does inside the
+    game process: assign GameId, leave GameId2 alone."""
+    w = FreeTrackWriter()
+    w.open()
+    try:
+        w.set_game_id(0)
+        assert w.detected_client_game_id() is None
+        w._heap.GameID = 14101          # the game registers itself
+        assert w.detected_client_game_id() == 14101
+        w.set_game_id(0)                # we re-publish; signal clears
+        assert w.detected_client_game_id() is None
+    finally:
+        w.close()
+
+
+def test_detection_is_noop_when_closed() -> None:
+    assert FreeTrackWriter().detected_client_game_id() is None

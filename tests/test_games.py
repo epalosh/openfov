@@ -21,7 +21,10 @@ def test_iracing_profile_metadata() -> None:
     assert IRACING_PROFILE.id == "iracing"
     assert IRACING_PROFILE.display_name == "iRacing"
     assert "iRacingSim64DX11.exe" in IRACING_PROFILE.process_names
-    assert IRACING_PROFILE.output.game_id == 1001
+    # 14101 is what iRacing actually passes to NP_RegisterProgramProfileID
+    # (observed in FT_SharedMem's GameId against the 2026.06 DX11 build).
+    # Releases through 0.2.1 guessed 1001.
+    assert IRACING_PROFILE.output.game_id == 14101
     assert IRACING_PROFILE.output.encryption_key == b"\x00" * 8
 
 

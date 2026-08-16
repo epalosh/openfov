@@ -334,11 +334,38 @@ class FreeTrackWriter:
 
     def set_game_id(self, game_id: int) -> None:
         """Update the GameID fields. Triggers NPClient to reload the
-        per-game encryption key on the read side."""
+        per-game encryption key on the read side.
+
+        Both fields are written: NPClient only trusts the encryption table
+        when `GameId == GameId2`, which is the protocol's torn-write guard.
+        """
         self._game_id = game_id
         if self._heap is not None:
             self._heap.GameID = game_id
             self._heap.GameID2 = game_id
+
+    def detected_client_game_id(self) -> int | None:
+        """Return the program-profile ID of a game that has connected, or
+        None if nothing has.
+
+        How this works: we always write `GameId` and `GameId2` to the *same*
+        value. NPClient's `NP_RegisterProgramProfileID`, running inside the
+        game process, assigns `pMemData->GameId = id` and never touches
+        `GameId2`. So an inequality between the two fields can only have
+        been produced by a game that loaded our DLL and registered itself.
+
+        That makes this a true end-to-end liveness check — it proves the
+        game found the registry key, loaded NPClient64.dll, passed the
+        signature check, and called into us. Nothing else in the app can
+        observe that, which is why a broken registry layout went unnoticed
+        through three releases.
+        """
+        if sys.platform != "win32" or self._heap is None:
+            return None
+        game_id = self._heap.GameID
+        if game_id != self._heap.GameID2:
+            return int(game_id)
+        return None
 
     def set_encryption_key(self, key: bytes) -> None:
         """Set the 8-byte XOR key NPClient applies before returning data

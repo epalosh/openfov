@@ -26,7 +26,7 @@
 #ifndef MyAppVersion
   ; Keep in sync with pyproject.toml [project.version]. CI can override
   ; with `iscc /DMyAppVersion=1.2.3 installer/openfov.iss`.
-  #define MyAppVersion "0.2.1"
+  #define MyAppVersion "0.2.2"
 #endif
 
 [Setup]

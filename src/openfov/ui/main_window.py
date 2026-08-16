@@ -142,6 +142,16 @@ class MainWindow(QMainWindow):
         self._game_badge = QLabel("● no game detected")
         self._game_badge.setStyleSheet("color: #7a838c;")
 
+        # "Game is running" and "game is actually reading our head tracking"
+        # are very different claims, and conflating them is exactly how a
+        # totally broken output path looked healthy for three releases. The
+        # badge above reports process detection; this one reports the real
+        # end-to-end link (see PipelineThread.client_status).
+        self._link_badge = QLabel("○ no game is reading head tracking")
+        self._link_badge.setStyleSheet("color: #7a838c;")
+        self._link_badge.setWordWrap(True)
+        self._client_connected = False
+
         left_col = QVBoxLayout()
         left_col.setSpacing(6)
         left_col.addLayout(camera_row)
@@ -154,6 +164,7 @@ class MainWindow(QMainWindow):
         right_col = QVBoxLayout()
         right_col.addWidget(self._pose_widget)
         right_col.addWidget(self._game_badge)
+        right_col.addWidget(self._link_badge)
         right_col.addWidget(self._pose_readout, 1)
 
         right_col_widget = QWidget()
@@ -310,6 +321,7 @@ class MainWindow(QMainWindow):
         pipeline.pose_ready.connect(self._on_pose, Qt.QueuedConnection)
         pipeline.camera_status.connect(self._on_camera_status, Qt.QueuedConnection)
         pipeline.error.connect(self._on_pipeline_error, Qt.QueuedConnection)
+        pipeline.client_status.connect(self._on_client_status, Qt.QueuedConnection)
         # Outbound
         self.request_recenter.connect(pipeline.request_recenter)
         self.request_camera_switch.connect(pipeline.set_camera_index)
@@ -431,7 +443,12 @@ class MainWindow(QMainWindow):
     @Slot(object)
     def on_game_changed(self, profile: GameProfile | None) -> None:
         """Slot for GameWatcher.game_changed. Updates the badge + routes
-        the new output profile to the pipeline."""
+        the new output profile to the pipeline.
+
+        Note this only means the game's *process* is running. Whether it is
+        reading our head tracking is a separate question, answered by
+        `_on_client_status`."""
+        self._detected_game = profile
         if profile is None:
             self._game_badge.setText("● no game detected")
             self._game_badge.setStyleSheet("color: #7a838c;")
@@ -439,11 +456,43 @@ class MainWindow(QMainWindow):
         else:
             self._game_badge.setText(f"● {profile.display_name} detected")
             self._game_badge.setStyleSheet("color: #82c4ae;")
-            self.statusBar().showMessage(
-                f"{profile.display_name} started - tracking active", 3000
-            )
+            self.statusBar().showMessage(f"{profile.display_name} started", 3000)
             if hasattr(self, "_pipeline"):
-                self._pipeline.set_game_output(profile.output)
+                self._pipeline.set_game_output(
+                    profile.output,
+                    requires_trackir_process=profile.requires_trackir_process,
+                )
+        self._refresh_link_badge()
+
+    @Slot(bool, int)
+    def _on_client_status(self, connected: bool, game_id: int) -> None:
+        """Slot for PipelineThread.client_status — a game really did load
+        our NPClient and register itself."""
+        self._client_connected = connected
+        self._client_game_id = game_id
+        self._refresh_link_badge()
+        if connected:
+            self.statusBar().showMessage("head tracking connected to game", 4000)
+
+    def _refresh_link_badge(self) -> None:
+        """Three distinguishable states, because 'nothing is happening' used
+        to be indistinguishable from 'working'."""
+        game = getattr(self, "_detected_game", None)
+        if self._client_connected:
+            name = game.display_name if game else "A game"
+            self._link_badge.setText(f"● {name} is reading head tracking")
+            self._link_badge.setStyleSheet("color: #82c4ae;")
+        elif game is not None:
+            # The interesting failure: the game is up but has not loaded
+            # our client. Say so plainly instead of implying success.
+            self._link_badge.setText(
+                f"▲ {game.display_name} is running but is not reading head "
+                f"tracking yet — restart the game if this persists"
+            )
+            self._link_badge.setStyleSheet("color: #d9a441;")
+        else:
+            self._link_badge.setText("○ no game is reading head tracking")
+            self._link_badge.setStyleSheet("color: #7a838c;")
 
     # ------------------------------------------------------------------
     # Camera dropdown

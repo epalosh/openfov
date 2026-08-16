@@ -16,15 +16,11 @@ The installer also fetches the Microsoft Visual C++ Runtime if your
 machine doesn't already have it.
 
 On first launch Windows may show *"Windows protected your PC."*
-Click **More info → Run anyway**. OpenFOV is currently shipped unsigned
-while a free SignPath Foundation certificate is being approved; once
-signed, this prompt goes away for new downloads.
-
-A WinGet manifest will follow shortly after the first release lands —
-once merged, `winget install epalosh.OpenFOV` will work too.
+Click **More info → Run anyway**. OpenFOV is currently shipped unsigned. 
+Once signed, this prompt goes away for new downloads.
 
 See [docs/INSTALL.md](docs/INSTALL.md) for the full install + setup +
-uninstall walkthrough, including a SmartScreen screenshot.
+uninstall walkthrough.
 
 ## Quick start
 
@@ -32,10 +28,35 @@ uninstall walkthrough, including a SmartScreen screenshot.
 2. The first-run wizard walks you through: pick a webcam → calibrate
    your neutral pose (look straight, press the button) → read the
    in-game tips → done.
-3. Launch iRacing. TrackIR should be enabled by default! If not, in **Options → Graphics**, enable **TrackIR**.
+3. Launch iRacing. TrackIR should be enabled by default!
 4. Drive.
 
 To recenter your view at any time, press **F9**.
+
+## Troubleshooting
+
+**"OpenFOV tracks my head but iRacing doesn't move."** Releases up to and
+including **0.2.1** wrote the NaturalPoint registry pointer in the wrong
+place, so no game could ever locate OpenFOV's `NPClient64.dll` — silently,
+with no error. Update to the latest release; it corrects the key and cleans
+up the stale one on first launch.
+
+To confirm it is registered correctly, this key must exist and the path must
+end in a slash:
+
+```
+HKEY_CURRENT_USER\Software\NaturalPoint\NATURALPOINT\NPClient Location
+    Path = C:/Program Files/OpenFOV/resources/bin/
+```
+
+`%APPDATA%\OpenFOV\openfov.log` now records this on every launch — look for
+`NPClient registration verified`. If it says `BROKEN` or `MISSING`, attach
+the log to an issue.
+
+**Antivirus.** Some Defender definitions flag the bundled `TrackIR.exe` as
+malware (a false positive — it does nothing but sleep) and quarantine it out
+of `resources\bin\`. If tracking stopped working after an AV scan, check
+that folder still contains `NPClient64.dll` and `TrackIR.exe`.
 
 ## Architecture
 

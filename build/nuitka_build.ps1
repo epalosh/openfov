@@ -17,7 +17,7 @@
     Where to write the standalone folder. Defaults to dist/.
 
 .PARAMETER Version
-    Version string baked into the exe metadata. Default 0.2.1.0.
+    Version string baked into the exe metadata. Default 0.2.2.0.
 
 .NOTES
     On CI (windows-latest), Python 3.12 + Nuitka 2.7+ should already be
@@ -30,7 +30,7 @@
 [CmdletBinding()]
 param(
     [string]$OutDir = "",
-    [string]$Version = "0.2.1.0",
+    [string]$Version = "0.2.2.0",
     [string]$PythonExe = ""
 )
 

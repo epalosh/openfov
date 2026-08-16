@@ -563,11 +563,28 @@ class _CalibratePage(QWizardPage):
         self._calibrate_btn.setMinimumHeight(32)
         self._calibrate_btn.clicked.connect(self._on_capture)
 
+        # Escape hatch. Calibration needs a detected face, and without this
+        # the page is a hard dead end for anyone whose camera angle,
+        # lighting or webcam placement stops MediaPipe finding them: the
+        # Calibrate button stays disabled, so Next stays disabled, so the
+        # only way out of first-run setup is Cancel. Skipping just leaves
+        # the neutral pose at its default; the user can recenter with F9
+        # or re-run calibration later from the Help menu.
+        self._skip_btn = QPushButton("Skip for now")
+        self._skip_btn.setMinimumHeight(32)
+        self._skip_btn.setToolTip(
+            "Continue without calibrating. You can set your neutral pose "
+            "any time by pressing F9 while looking straight ahead."
+        )
+        self._skip_btn.clicked.connect(self._on_skip)
+
         self._status = QLabel("")
         self._status.setStyleSheet(f"color: {_DIM};")
+        self._status.setWordWrap(True)
 
         action_row = QHBoxLayout()
         action_row.addWidget(self._calibrate_btn)
+        action_row.addWidget(self._skip_btn)
         action_row.addSpacing(12)
         action_row.addWidget(self._status, stretch=1)
 
@@ -580,12 +597,14 @@ class _CalibratePage(QWizardPage):
 
         self._latest_pose: Pose6DOF | None = None
         self._neutral_captured: Pose6DOF | None = None
+        self._skipped = False
 
     def initializePage(self) -> None:
         cam_index = int(self.field("camera_index"))
         self._calibrate_btn.setEnabled(False)
         self._status.setText("")
         self._neutral_captured = None
+        self._skipped = False
         # Page transition first; tracker init + camera open happen one
         # tick later so Next feels instantaneous.
         QTimer.singleShot(0, lambda: self._activate(cam_index))
@@ -616,16 +635,28 @@ class _CalibratePage(QWizardPage):
         if self._latest_pose is None:
             return
         self._neutral_captured = self._latest_pose
+        self._skipped = False
         self._status.setText(
             f"Calibrated at ({self._latest_pose.yaw:+5.1f}°, "
             f"{self._latest_pose.pitch:+5.1f}°)."
         )
         self.completeChanged.emit()
 
+    def _on_skip(self) -> None:
+        self._skipped = True
+        self._neutral_captured = None
+        self._status.setText(
+            "Skipped — press F9 while looking straight ahead to set your "
+            "neutral pose later."
+        )
+        self.completeChanged.emit()
+
     def isComplete(self) -> bool:
-        return self._neutral_captured is not None
+        return self._neutral_captured is not None or self._skipped
 
     def neutral_pose(self) -> Pose6DOF | None:
+        """None when the user skipped — callers must leave the existing
+        neutral alone rather than treating it as a zeroed calibration."""
         return self._neutral_captured
 
 
@@ -763,11 +794,26 @@ class SetupWizard(QWizard):
         self.neutral_pose: Pose6DOF | None = None
 
         self.accepted.connect(self._on_accept)
+        self.rejected.connect(self._on_reject)
 
     def _on_accept(self) -> None:
-        self.chosen_camera_index = int(self.field("camera_index"))
+        self._capture_camera_choice()
         # chosen_game_id is fixed at "iracing" — see __init__.
         self.neutral_pose = self._calibrate.neutral_pose()
+
+    def _on_reject(self) -> None:
+        """Cancelling drops the user into the main window rather than
+        quitting, so a camera they already confirmed a live preview on is
+        still the right one to use. Losing it left them staring at camera
+        0, which is frequently not a webcam at all."""
+        self._capture_camera_choice()
+
+    def _capture_camera_choice(self) -> None:
+        # userData is None while the "— Select a camera —" placeholder is
+        # active, i.e. the user never made an affirmative choice.
+        value = self.field("camera_index")
+        if value is not None:
+            self.chosen_camera_index = int(value)
 
 
 __all__ = ["SetupWizard"]
