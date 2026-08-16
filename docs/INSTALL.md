@@ -1,17 +1,5 @@
 # Installing OpenFOV
 
-## Recommended: WinGet
-
-If you're on Windows 10 / 11, the easiest install is:
-
-```pwsh
-winget install OpenFOV
-```
-
-This goes through Microsoft's package manager. No SmartScreen prompts,
-no manual download. **(Available once our WinGet manifest is merged —
-typically 1–3 days after each release.)**
-
 ## Direct download
 
 1. Go to [Releases](https://github.com/epalosh/openfov/releases)
@@ -19,8 +7,7 @@ typically 1–3 days after each release.)**
 2. Double-click to run.
 3. Click **More info → Run anyway** if Windows shows the SmartScreen
    warning shown below — this is expected for unsigned open-source
-   software during our SignPath approval window. The warning will
-   disappear once our certificate is issued.
+   software. The warning will disappear once our certificate is issued.
 
 ![Windows SmartScreen warning](smartscreen.png)
 
@@ -49,8 +36,7 @@ typically 1–3 days after each release.)**
    - Calibrating your neutral pose.
    - Selecting iRacing as the default game profile.
 2. Open iRacing.
-3. **Options → Graphics → Enable TrackIR** ✓.
-4. Get in a car. Look around. Your head moves the camera.
+3. Get in a car. Look around. Your head moves the camera.
 
 That's it.
 
@@ -80,9 +66,10 @@ camera. OpenFOV uses Media Foundation by default and falls back to
 DirectShow.
 
 **Tracking works but iRacing doesn't move the view.**
-Confirm Options → Graphics → Enable TrackIR is ticked. Restart iRacing
-once after enabling. Also: TrackIR is only honored in cockpit/chase
-cameras — not the swooping replay cameras.
+There are known issues with getting OpenFOV connected to iRacing on some 
+users' setups. We are working on a solution! In the meantime, see the "Issues"
+tab for discussion on this, and how you might be able to fix the issue manually
+until a new release is dropped. ETA before 6/14. Thank you for your patience!
 
 **The app reports "camera disconnected".**
 OpenFOV auto-retries on USB reconnect. Just plug your webcam back in;
@@ -97,5 +84,4 @@ enabled in a release build). For dev runs, logs go to stderr.
 If you own real TrackIR hardware, NaturalPoint's own NPClient.dll takes
 priority — the registry key is theirs to manage too. OpenFOV's setup
 detects this on launch and yields cleanly: no duplicate TrackIR.exe
-processes, no fighting over `FT_SharedMem`. You can use OpenFOV as a
-backup when the IR clip is across the room and you don't want to get up.
+processes, no fighting over `FT_SharedMem`.
