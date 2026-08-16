@@ -1,17 +1,5 @@
 # Installing OpenFOV
 
-## Recommended: WinGet
-
-If you're on Windows 10 / 11, the easiest install is:
-
-```pwsh
-winget install OpenFOV
-```
-
-This goes through Microsoft's package manager. No SmartScreen prompts,
-no manual download. **(Available once our WinGet manifest is merged —
-typically 1–3 days after each release.)**
-
 ## Direct download
 
 1. Go to [Releases](https://github.com/epalosh/openfov/releases)
